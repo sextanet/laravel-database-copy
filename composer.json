@@ -1,0 +1,74 @@
+{
+    "name": "sextanet/laravel-database-copy",
+    "description": "Copy databases between environments, anonymized before they leave the source",
+    "keywords": [
+        "SextaNet",
+        "laravel",
+        "laravel-database-copy"
+    ],
+    "homepage": "https://github.com/sextanet/laravel-database-copy",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "SextaNet",
+            "email": "dev@sextanet.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "ext-zip": "*",
+        "fakerphp/faker": "^1.24",
+        "illuminate/contracts": "^13.0",
+        "spatie/laravel-backup": "^10.3",
+        "spatie/laravel-package-tools": "^1.16",
+        "wnx/laravel-backup-restore": "^1.9"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.14",
+        "nunomaduro/collision": "^8.8",
+        "larastan/larastan": "^3.0",
+        "orchestra/testbench": "^11.0",
+        "pestphp/pest": "^5.0",
+        "pestphp/pest-plugin-arch": "^5.0",
+        "pestphp/pest-plugin-laravel": "^5.0",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan-deprecation-rules": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SextaNet\\LaravelDatabaseCopy\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SextaNet\\LaravelDatabaseCopy\\Tests\\": "tests/",
+            "Workbench\\App\\": "workbench/app/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": "@composer run prepare",
+        "prepare": "@php vendor/bin/testbench package:discover --ansi",
+        "analyse": "vendor/bin/phpstan analyse",
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage",
+        "format": "vendor/bin/pint"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "SextaNet\\LaravelDatabaseCopy\\LaravelDatabaseCopyServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
