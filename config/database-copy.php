@@ -69,6 +69,10 @@ return [
     |   every export. Null uses "{database}_anonymized". It must exist,
     |   except with SQLite: the file is created and deleted after exporting.
     |
+    | connection: a connection of config/database.php to anonymize in
+    |   instead (another host, user, port, …). Its database is emptied after
+    |   every export. Takes precedence over database.
+    |
     | Strategies by column:
     |   first_name, last_name, name  → fake names
     |   email      → unique: {table}-{id}@{email_domain}
@@ -83,6 +87,8 @@ return [
     'anonymization' => [
 
         'database' => env('DATABASE_COPY_ANONYMIZATION_DATABASE'),
+
+        'connection' => env('DATABASE_COPY_ANONYMIZATION_CONNECTION'),
 
         'locale' => env('DATABASE_COPY_LOCALE', 'es_ES'),
 

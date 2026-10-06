@@ -28,6 +28,7 @@ DATABASE_COPY_NAME=my-app        # folder of this app in the disk (default: slug
 
 # Source environment only
 DATABASE_COPY_ANONYMIZATION_DATABASE=   # default: {database}_anonymized
+DATABASE_COPY_ANONYMIZATION_CONNECTION= # optional: a connection of config/database.php (see below)
 DATABASE_COPY_EMAIL_DOMAIN=anonymized.test
 DATABASE_COPY_KEEP_EMAILS=seba@sextanet.cl   # rows that keep their data, comma separated
 ```
@@ -42,6 +43,24 @@ GRANT ALL PRIVILEGES ON my_app_anonymized.* TO 'my_app'@'localhost';
 
 It is emptied after every export, even when something fails. With SQLite there is nothing to create: the file
 (`database/database_anonymized.sqlite` by default) is created and deleted on every export.
+
+To anonymize somewhere else (another host, a user with its own permissions, a different port…), add a connection to
+`config/database.php` and set `DATABASE_COPY_ANONYMIZATION_CONNECTION` to its name. It takes precedence over
+`DATABASE_COPY_ANONYMIZATION_DATABASE`, its database is emptied after every export, and the export refuses it when it
+points to the source database:
+
+```php
+'anonymization' => [
+    'driver' => 'mysql',
+    'host' => env('DB_ANONYMIZATION_HOST', '127.0.0.1'),
+    'port' => env('DB_ANONYMIZATION_PORT', '3306'),
+    'database' => env('DB_ANONYMIZATION_DATABASE', 'my_app_anonymized'),
+    'username' => env('DB_ANONYMIZATION_USERNAME'),
+    'password' => env('DB_ANONYMIZATION_PASSWORD'),
+    'charset' => 'utf8mb4',
+    'collation' => 'utf8mb4_unicode_ci',
+],
+```
 
 ## Anonymization
 

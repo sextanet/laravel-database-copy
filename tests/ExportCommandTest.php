@@ -66,6 +66,45 @@ it('uses the configured anonymization database', function () {
     expect(File::exists($this->directory.'/database_anonymized.sqlite'))->toBeFalse();
 });
 
+it('anonymizes in the configured connection', function () {
+    touch($this->directory.'/other-server.sqlite');
+    config()->set('database.connections.other-server', array_merge(config('database.connections.testing'), [
+        'database' => $this->directory.'/other-server.sqlite',
+    ]));
+    config()->set('database-copy.anonymization.connection', 'other-server');
+
+    $this->artisan('database-copy:export')->assertSuccessful();
+
+    openCopy('testing/my-app/2026-10-04-03-30-00.zip');
+
+    expect(DB::connection('copy')->table('users')->sole()->email)->toBe('users-1@anonymized.test')
+        ->and(File::exists($this->directory.'/other-server.sqlite'))->toBeTrue()
+        ->and(Schema::connection('other-server')->getTableListing())->toBe([])
+        ->and(File::exists($this->directory.'/database_anonymized.sqlite'))->toBeFalse();
+});
+
+it('refuses an anonymization connection that points to the source database', function (string $connection) {
+    config()->set('database.connections.same-database', config('database.connections.testing'));
+    config()->set('database-copy.anonymization.connection', $connection);
+
+    $this->artisan('database-copy:export')
+        ->expectsOutputToContain('must be different')
+        ->assertFailed();
+
+    expect(Storage::disk('backups')->allFiles())->toBe([])
+        ->and(DB::table('users')->sole()->email)->toBe('maria@gmail.com');
+})->with(['the source connection' => 'testing', 'another name for it' => 'same-database']);
+
+it('fails when the anonymization connection does not exist', function () {
+    config()->set('database-copy.anonymization.connection', 'missing');
+
+    $this->artisan('database-copy:export')
+        ->expectsOutputToContain('Database connection [missing] not configured')
+        ->assertFailed();
+
+    expect(Storage::disk('backups')->allFiles())->toBe([]);
+});
+
 it('uploads the real data without anonymization', function () {
     $this->artisan('database-copy:export', ['--without-anonymization' => true])
         ->expectsOutputToContain('NOT anonymized')

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use SextaNet\LaravelDatabaseCopy\Exceptions\UnsafeAnonymizationDatabase;
 use SextaNet\LaravelDatabaseCopy\Exceptions\UploadFailed;
 use Spatie\Backup\Tasks\Backup\DbDumperFactory;
@@ -73,53 +74,97 @@ class Exporter
      */
     private function anonymize(string $connection, string $dump, Closure $output): void
     {
-        $created = $this->registerAnonymizationConnection($connection);
-        $schema = DB::connection(self::ANONYMIZATION_CONNECTION)->getSchemaBuilder();
+        [$anonymization, $created] = $this->anonymizationConnection($connection);
+        $schema = DB::connection($anonymization)->getSchemaBuilder();
 
         try {
             $output('Importing into the anonymization database…');
             $schema->dropAllTables();
-            DbImporterFactory::createFromConnection(self::ANONYMIZATION_CONNECTION)->importToDatabase($dump, self::ANONYMIZATION_CONNECTION);
+            DbImporterFactory::createFromConnection($anonymization)->importToDatabase($dump, $anonymization);
             File::delete($dump);
-            DB::purge(self::ANONYMIZATION_CONNECTION);
+            DB::purge($anonymization);
 
             $output('Anonymizing…');
-            $this->anonymizer->run(self::ANONYMIZATION_CONNECTION);
+            $this->anonymizer->run($anonymization);
 
             $output('Dumping the anonymized database…');
-            $this->dump(self::ANONYMIZATION_CONNECTION, $dump);
+            $this->dump($anonymization, $dump);
         } finally {
-            DB::connection(self::ANONYMIZATION_CONNECTION)->getSchemaBuilder()->dropAllTables();
-            DB::purge(self::ANONYMIZATION_CONNECTION);
+            DB::connection($anonymization)->getSchemaBuilder()->dropAllTables();
+            DB::purge($anonymization);
 
             if ($created) {
-                File::delete(config('database.connections.'.self::ANONYMIZATION_CONNECTION.'.database'));
+                File::delete(config("database.connections.{$anonymization}.database"));
             }
         }
     }
 
     /**
-     * Register the anonymization connection. Returns whether its SQLite file was created here, to delete it after.
+     * The connection where the dump is anonymized: the configured one (any host, user, …) or the source connection
+     * pointing to the anonymization database. Also returns whether its SQLite file was created here, to delete it after.
+     *
+     * @return array{string, bool}
      */
-    private function registerAnonymizationConnection(string $connection): bool
+    private function anonymizationConnection(string $connection): array
     {
-        $config = Arr::except((new ConfigurationUrlParser)->parseConfiguration(config("database.connections.{$connection}")), 'url');
-        $database = config('database-copy.anonymization.database') ?: preg_replace('/(\.\w+)?$/', '_anonymized$1', $config['database'], 1);
+        $source = $this->connectionConfiguration($connection);
+        $name = config('database-copy.anonymization.connection');
 
-        if ($database === $config['database']) {
-            throw UnsafeAnonymizationDatabase::sameAsSource($database);
+        if ($name) {
+            $config = $this->connectionConfiguration($name);
+        } else {
+            $name = self::ANONYMIZATION_CONNECTION;
+            $config = array_merge($source, [
+                'database' => config('database-copy.anonymization.database') ?: preg_replace('/(\.\w+)?$/', '_anonymized$1', $source['database'], 1),
+            ]);
         }
 
-        $created = $config['driver'] === 'sqlite' && ! File::exists($database);
+        if ($name === $connection || $this->location($config) === $this->location($source)) {
+            throw UnsafeAnonymizationDatabase::sameAsSource($source['database']);
+        }
+
+        config()->set("database.connections.{$name}", $config);
+        DB::purge($name);
+
+        $created = $config['driver'] === 'sqlite' && ! File::exists($config['database']);
 
         if ($created) {
-            File::put($database, '');
+            File::put($config['database'], '');
         }
 
-        config()->set('database.connections.'.self::ANONYMIZATION_CONNECTION, array_merge($config, ['database' => $database]));
-        DB::purge(self::ANONYMIZATION_CONNECTION);
+        return [$name, $created];
+    }
 
-        return $created;
+    /**
+     * @return array<string, mixed>
+     */
+    private function connectionConfiguration(string $connection): array
+    {
+        $config = config("database.connections.{$connection}");
+
+        if (! is_array($config)) {
+            throw new InvalidArgumentException("Database connection [{$connection}] not configured.");
+        }
+
+        return Arr::except((new ConfigurationUrlParser)->parseConfiguration($config), 'url');
+    }
+
+    /**
+     * Where a connection's data lives, to compare the anonymization database with the source.
+     *
+     * @param  array<string, mixed>  $config
+     * @return array<int, mixed>
+     */
+    private function location(array $config): array
+    {
+        $host = Arr::first(Arr::wrap($config['write']['host'] ?? $config['host'] ?? null));
+
+        return [
+            $config['driver'],
+            $host === 'localhost' ? '127.0.0.1' : $host,
+            (string) ($config['port'] ?? ''),
+            $config['driver'] === 'sqlite' ? realpath($config['database']) ?: $config['database'] : $config['database'],
+        ];
     }
 
     /**
